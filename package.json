@@ -33,7 +33,7 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
-    "prepare": "husky",
+    "prepare": "husky && npm run build",
     "format": "eslint --fix {./src/,./tests/}*.ts",
     "lint": "eslint {./src/,./tests/}*.ts",
     "build": "rimraf dist && tsc --project tsconfig.esm.json && tsc --project tsconfig.cjs.json",
