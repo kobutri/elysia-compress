@@ -1,6 +1,5 @@
 import { Elysia, mapResponse } from 'elysia'
 import type {
-  CacheOptions,
   CompressionEncoding,
   CompressionOptions,
   LifeCycleOptions,
@@ -14,26 +13,23 @@ import {
   deflateSync,
 } from 'node:zlib'
 import { CompressionStream } from './compression-stream'
-import cacheStore from './cache'
 
 /**
  * Creates a compression middleware function that compresses the response body based on the client's accept-encoding header.
  *
- * @param {CompressionOptions & LifeCycleOptions & CacheOptions} [options] - Optional compression, caching, and life cycle options.
+ * @param {CompressionOptions & LifeCycleOptions} [options] - Optional compression, and life cycle options.
  * @param {CompressionOptions} [options.compressionOptions] - Compression options.
  * @param {LifeCycleOptions} [options.lifeCycleOptions] - Life cycle options.
- * @param {CacheOptions} [options.cacheOptions] - Cache options.
  * @param {CompressionEncoding[]} [options.compressionOptions.encodings] - An array of supported compression encodings. Defaults to ['br', 'gzip', 'deflate'].
  * @param {boolean} [options.compressionOptions.disableByHeader] - Disable compression by header. Defaults to false.
  * @param {BrotliOptions} [options.compressionOptions.brotliOptions] - Brotli compression options.
  * @param {ZlibOptions} [options.compressionOptions.zlibOptions] - Zlib compression options.
  * @param {LifeCycleType} [options.lifeCycleOptions.as] - The life cycle type. Defaults to 'scoped'.
  * @param {number} [options.compressionOptions.threshold] - The minimum byte size for a response to be compressed. Defaults to 1024.
- * @param {number} [options.cacheOptions.TTL] - The time-to-live for the cache. Defaults to 24 hours.
  * @returns {Elysia} - The Elysia app with compression middleware.
  */
 export const compression = (
-  options?: CompressionOptions & LifeCycleOptions & CacheOptions,
+  options?: CompressionOptions & LifeCycleOptions,
 ) => {
   const zlibOptions: ZlibOptions = {
     ...{
@@ -55,7 +51,6 @@ export const compression = (
     /^text\/(?!event-stream)|(?:\+|\/)json(?:;|$)|(?:\+|\/)text(?:;|$)|(?:\+|\/)xml(?:;|$)|octet-stream(?:;|$)/u
   const lifeCycleType = options?.as ?? 'global'
   const threshold = options?.threshold ?? 1024
-  const cacheTTL = options?.TTL ?? 24 * 60 * 60 // 24 hours
   const disableByHeader = options?.disableByHeader ?? true
   const compressStream = options?.compressStream ?? true
   const app = new Elysia({
@@ -77,17 +72,11 @@ export const compression = (
    * @param {ArrayBuffer} buffer - The buffer to compress.
    * @returns {Buffer} The compressed buffer.
    */
-  const getOrCompress = (
+  const compress = (
     algorithm: CompressionEncoding,
     buffer: ArrayBuffer,
   ): Buffer => {
-    const cacheKey = Bun.hash(`${algorithm}:${textDecoder.decode(buffer)}}`)
-    if (cacheStore.has(cacheKey)) {
-      return cacheStore.get(cacheKey)
-    }
-
     const compressedOutput = compressors[algorithm](buffer)
-    cacheStore.set(cacheKey, compressedOutput, cacheTTL)
     return compressedOutput
   }
 
@@ -150,7 +139,7 @@ export const compression = (
         return
       }
 
-      compressed = getOrCompress(encoding, buffer) // Will try cache first
+      compressed = compress(encoding, buffer)
     }
 
     /**

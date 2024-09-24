@@ -57,7 +57,7 @@ export type CompressionOptions = {
    * Defaults to `false`
    * @default false
    */
-  compressStream: boolean
+  compressStream?: boolean
 }
 
 export type LifeCycleOptions = {
@@ -76,15 +76,4 @@ export type LifeCycleOptions = {
   as?: LifeCycleType
 }
 
-export type CacheOptions = {
-  /**
-   * The time-to-live in seconds for the cache.
-   *
-   * @default 86400 (24 hours)
-   */
-  TTL?: number
-}
-
-export type ElysiaCompressionOptions = CompressionOptions &
-  LifeCycleOptions &
-  CacheOptions
+export type ElysiaCompressionOptions = CompressionOptions & LifeCycleOptions
