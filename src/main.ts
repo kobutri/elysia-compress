@@ -1,4 +1,4 @@
-import { Elysia, mapResponse } from 'elysia'
+import { Elysia, mapResponse, MaybePromise } from 'elysia'
 import type {
   CompressionEncoding,
   CompressionOptions,
@@ -13,6 +13,7 @@ import {
   deflateSync,
 } from 'node:zlib'
 import { CompressionStream } from './compression-stream'
+import { compress as zstdCompress } from '@mongodb-js/zstd'
 
 /**
  * Creates a compression middleware function that compresses the response body based on the client's accept-encoding header.
@@ -46,7 +47,13 @@ export const compression = (
     },
     ...options?.brotliOptions,
   }
-  const defaultEncodings = options?.encodings ?? ['br', 'gzip', 'deflate']
+  const zstdCompressionLevel = options?.zstdCompressionLevel ?? 3
+  const defaultEncodings = options?.encodings ?? [
+    'zstd',
+    'br',
+    'gzip',
+    'deflate',
+  ]
   const defaultCompressibleTypes =
     /^text\/(?!event-stream)|(?:\+|\/)json(?:;|$)|(?:\+|\/)text(?:;|$)|(?:\+|\/)xml(?:;|$)|octet-stream(?:;|$)/u
   const lifeCycleType = options?.as ?? 'global'
@@ -62,7 +69,12 @@ export const compression = (
     br: (buffer: ArrayBuffer) => brotliCompressSync(buffer, brotliOptions),
     gzip: (buffer: ArrayBuffer) => gzipSync(buffer, zlibOptions),
     deflate: (buffer: ArrayBuffer) => deflateSync(buffer, zlibOptions),
-  } as Record<CompressionEncoding, (buffer: ArrayBuffer) => Buffer>
+    zstd: (buffer: ArrayBuffer) =>
+      zstdCompress(Buffer.from(buffer), zstdCompressionLevel),
+  } as Record<
+    CompressionEncoding,
+    (buffer: ArrayBuffer) => MaybePromise<Buffer>
+  >
   const textDecoder = new TextDecoder()
 
   /**
@@ -72,12 +84,12 @@ export const compression = (
    * @param {ArrayBuffer} buffer - The buffer to compress.
    * @returns {Buffer} The compressed buffer.
    */
-  const compress = (
+  const compress = async (
     algorithm: CompressionEncoding,
     buffer: ArrayBuffer,
-  ): Buffer => {
+  ): Promise<Buffer> => {
     const compressedOutput = compressors[algorithm](buffer)
-    return compressedOutput
+    return await compressedOutput
   }
 
   /**
@@ -121,7 +133,7 @@ export const compression = (
       compressed = stream.pipeThrough(CompressionStream(encoding, options))
     } else {
       const res = mapResponse(response, {
-        headers: {},
+        headers: set.headers,
       })
       const resContentType = res.headers.get('Content-Type')
 
@@ -139,7 +151,7 @@ export const compression = (
         return
       }
 
-      compressed = compress(encoding, buffer)
+      compressed = await compress(encoding, buffer)
     }
 
     /**
@@ -173,12 +185,10 @@ export const compression = (
       set.headers.Vary = 'accept-encoding'
     }
     set.headers['Content-Encoding'] = encoding
-
-    return new Response(compressed, {
-      headers: {
-        'Content-Type': contentType,
-      },
-    })
+    if (!set.headers['Content-Type']) {
+      set.headers['Content-Type'] = contentType
+    }
+    return new Response(compressed)
   })
   return app
 }

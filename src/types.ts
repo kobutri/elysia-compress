@@ -1,6 +1,6 @@
 import type { LifeCycleType } from 'elysia'
 import type { BrotliOptions, ZlibOptions } from 'node:zlib'
-export type CompressionEncoding = 'br' | 'deflate' | 'gzip'
+export type CompressionEncoding = 'zstd' | 'br' | 'deflate' | 'gzip'
 
 export type CompressionOptions = {
   /**
@@ -16,6 +16,13 @@ export type CompressionOptions = {
    * @see https://nodejs.org/api/zlib.html#class-options
    */
   zlibOptions?: ZlibOptions
+
+  /**
+   * The options use for zstd compression.
+   *
+   * @see https://github.com/mongodb-js/zstd
+   */
+  zstdCompressionLevel?: number
 
   /**
    * The encodings to use.

@@ -4,6 +4,7 @@ exports.compression = void 0;
 const elysia_1 = require("elysia");
 const node_zlib_1 = require("node:zlib");
 const compression_stream_1 = require("./compression-stream");
+const zstd_1 = require("@mongodb-js/zstd");
 const compression = (options) => {
     const zlibOptions = {
         ...{
@@ -20,7 +21,13 @@ const compression = (options) => {
         },
         ...options?.brotliOptions,
     };
-    const defaultEncodings = options?.encodings ?? ['br', 'gzip', 'deflate'];
+    const zstdCompressionLevel = options?.zstdCompressionLevel ?? 3;
+    const defaultEncodings = options?.encodings ?? [
+        'zstd',
+        'br',
+        'gzip',
+        'deflate',
+    ];
     const defaultCompressibleTypes = /^text\/(?!event-stream)|(?:\+|\/)json(?:;|$)|(?:\+|\/)text(?:;|$)|(?:\+|\/)xml(?:;|$)|octet-stream(?:;|$)/u;
     const lifeCycleType = options?.as ?? 'global';
     const threshold = options?.threshold ?? 1024;
@@ -34,11 +41,12 @@ const compression = (options) => {
         br: (buffer) => (0, node_zlib_1.brotliCompressSync)(buffer, brotliOptions),
         gzip: (buffer) => (0, node_zlib_1.gzipSync)(buffer, zlibOptions),
         deflate: (buffer) => (0, node_zlib_1.deflateSync)(buffer, zlibOptions),
+        zstd: (buffer) => (0, zstd_1.compress)(Buffer.from(buffer), zstdCompressionLevel),
     };
     const textDecoder = new TextDecoder();
-    const compress = (algorithm, buffer) => {
+    const compress = async (algorithm, buffer) => {
         const compressedOutput = compressors[algorithm](buffer);
-        return compressedOutput;
+        return await compressedOutput;
     };
     app.mapResponse({ as: lifeCycleType }, async (ctx) => {
         if (disableByHeader && ctx.headers['x-no-compression']) {
@@ -60,7 +68,7 @@ const compression = (options) => {
         }
         else {
             const res = (0, elysia_1.mapResponse)(response, {
-                headers: {},
+                headers: set.headers,
             });
             const resContentType = res.headers.get('Content-Type');
             contentType = resContentType ? resContentType : 'text/plain';
@@ -72,7 +80,7 @@ const compression = (options) => {
             if (!isCompressible) {
                 return;
             }
-            compressed = compress(encoding, buffer);
+            compressed = await compress(encoding, buffer);
         }
         const vary = set.headers.Vary ?? set.headers.vary;
         if (vary) {
@@ -93,11 +101,10 @@ const compression = (options) => {
             set.headers.Vary = 'accept-encoding';
         }
         set.headers['Content-Encoding'] = encoding;
-        return new Response(compressed, {
-            headers: {
-                'Content-Type': contentType,
-            },
-        });
+        if (!set.headers['Content-Type']) {
+            set.headers['Content-Type'] = contentType;
+        }
+        return new Response(compressed);
     });
     return app;
 };

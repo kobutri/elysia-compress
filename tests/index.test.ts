@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 import zlib from 'node:zlib'
+import { decompress as ztsdDecompress } from '@mongodb-js/zstd'
 import Elysia from 'elysia'
 import { Stream } from '@elysiajs/stream'
 import { cors } from '@elysiajs/cors'
@@ -286,22 +287,22 @@ describe(`elysia-compress`, () => {
     })
 
     const res = await app.handle(req())
-    const test = zlib
-      .brotliDecompressSync(await res.arrayBuffer())
-      .toString('utf-8')
+    const test = (
+      await ztsdDecompress(Buffer.from(await res.arrayBuffer()))
+    ).toString('utf-8')
 
     expect(res.status).toBe(200)
-    expect(res.headers.get('Content-Encoding')).toBe('br')
+    expect(res.headers.get('Content-Encoding')).toBe('zstd')
     expect(res.headers.get('Vary')).toBe('accept-encoding')
     expect(test).toBe(responseShort)
 
     const res2 = await app.handle(req())
-    const test2 = zlib
-      .brotliDecompressSync(await res2.arrayBuffer())
-      .toString('utf-8')
+    const test2 = (
+      await ztsdDecompress(Buffer.from(await res2.arrayBuffer()))
+    ).toString('utf-8')
 
     expect(res2.status).toBe(200)
-    expect(res2.headers.get('Content-Encoding')).toBe('br')
+    expect(res2.headers.get('Content-Encoding')).toBe('zstd')
     expect(res2.headers.get('Vary')).toBe('accept-encoding')
     expect(test2).toBe(responseShort)
     expect(test2).toBe(test)
@@ -318,7 +319,7 @@ describe(`elysia-compress`, () => {
     const res = await app.handle(req())
 
     expect(res.status).toBe(200)
-    expect(res.headers.get('Content-Encoding')).toBe('br')
+    expect(res.headers.get('Content-Encoding')).toBe('zstd')
     expect(res.headers.get('Vary')).toBe('location, header, accept-encoding')
   })
 })
